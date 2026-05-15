@@ -1,0 +1,14 @@
+# Ignore all data folders and files
+bronze/
+silver/
+gold/
+*.csv
+*.parquet
+*.xlsx
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
