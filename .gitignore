@@ -1,17 +1,32 @@
-# Ignore all data folders and files
-bronze/
-silver/
-gold/
-raw_extract/
-*.csv
-*.parquet
-*.xlsx
-datastorm-7-0-rotaract.zip
-dq_checks.py
-
-# Ignore Jupyter Notebook checkpoints
-.ipynb_checkpoints/
-
-# Ignore Python cache
+# Environment and Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.env
+venv/
+env/
+.venv/
+
+# Original Source Data
+datastorm-7-0-rotaract/
+
+# Lakehouse Data (Ignore heavy data files, but keep the directory structure)
+Lakehouse/bronze/*.csv
+Lakehouse/bronze/*.xlsx
+Lakehouse/bronze/*.json
+
+Lakehouse/silver/*.csv
+Lakehouse/silver/*.json
+
+Lakehouse/silver/quarantined/*.csv
+Lakehouse/silver/quarantined/*.json
+
+Lakehouse/gold/*.csv
+Lakehouse/gold/*.json
+
+# Make sure we DO NOT ignore the final submission predictions
+!CodeStormers_predictions.csv
+!README.md
+!Technical_Report_CodeStormers.md
+!requirements.txt
