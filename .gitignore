@@ -2,9 +2,12 @@
 bronze/
 silver/
 gold/
+raw_extract/
 *.csv
 *.parquet
 *.xlsx
+datastorm-7-0-rotaract.zip
+dq_checks.py
 
 # Ignore Jupyter Notebook checkpoints
 .ipynb_checkpoints/
