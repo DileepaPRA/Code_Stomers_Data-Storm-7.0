@@ -10,7 +10,7 @@ import shutil
 import os
 import sys
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import *
 
 
@@ -28,7 +28,7 @@ def main():
     ]
 
     for fname in files_to_ingest:
-        src = os.path.join(RAW_EXTRACT_DIR, fname)
+        src = os.path.join(RAW_DIR, fname)
         dst = os.path.join(BRONZE_DIR, fname)
 
         if not os.path.exists(src):
@@ -41,7 +41,7 @@ def main():
 
     # Also copy the dataset description for reference
     desc_file = "1. dataset_description.xlsx"
-    src_desc = os.path.join(RAW_EXTRACT_DIR, desc_file)
+    src_desc = os.path.join(RAW_DIR, desc_file)
     if os.path.exists(src_desc):
         shutil.copy2(src_desc, os.path.join(BRONZE_DIR, desc_file))
         print(f"  [OK] {desc_file} -> bronze/")

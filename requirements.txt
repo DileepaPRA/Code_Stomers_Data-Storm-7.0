@@ -1,0 +1,13 @@
+# DataStorm 7.0 — Code_Stomers Dependencies
+pandas>=2.0
+numpy>=1.24
+scikit-learn>=1.3
+scipy>=1.11
+openpyxl>=3.1
+requests>=2.31
+geopandas>=0.14
+osmnx>=1.9
+jupyter>=1.0
+notebook>=7.0
+matplotlib>=3.7
+seaborn>=0.12

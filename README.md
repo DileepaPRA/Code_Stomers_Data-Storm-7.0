@@ -23,22 +23,22 @@ Python 3.10+ required.
 
 ```bash
 # Step 1: Bronze Layer — Copy raw files (no transforms)
-python scripts/01_bronze_ingest.py
+python src/ingest.py
 
 # Step 2: Silver Layer — Clean data, quarantine failures
-python scripts/02_silver_clean.py
+python src/cleaning.py
 
-# Step 3: POI Scraping — External data from OpenStreetMap (optional, takes ~hours)
-python scripts/03_poi_scraping.py
+# Step 3: POI Scraping — External data from OpenStreetMap + Weather + Density
+python src/external_data.py
 
 # Step 4: Gold Layer — Feature engineering
-python scripts/04_gold_feature_engineering.py
+python src/features.py
 
 # Step 5: Model — Predict latent potential
-python scripts/05_latent_potential_model.py
+python src/model.py
 ```
 
-**Output**: `output/Code_Stomers_predictions.csv` — 20,000 rows with `Outlet_ID` and `Maximum_Monthly_Liters`.
+**Output**: `data/output/Code_Stomers_predictions.csv` — 20,000 rows with `Outlet_ID` and `Maximum_Monthly_Liters`.
 
 ---
 
@@ -46,26 +46,33 @@ python scripts/05_latent_potential_model.py
 
 ```
 Code_Stomers_Data-Storm-7.0/
-├── scripts/                          # All pipeline code
+├── src/                              # All pipeline code
 │   ├── config.py                     # Shared paths, constants, parameters
 │   ├── dq_checks.py                  # Reusable DQ check framework (8 check types)
-│   ├── 01_bronze_ingest.py           # Bronze: raw ingestion (zero transforms)
-│   ├── 02_silver_clean.py            # Silver: cleaning + quarantine
-│   ├── 03_poi_scraping.py            # External: POI data from OpenStreetMap
-│   ├── 04_gold_feature_engineering.py# Gold: feature engineering (30+ features)
-│   └── 05_latent_potential_model.py  # Model: 3-method ensemble prediction
+│   ├── ingest.py                     # Bronze: raw ingestion (zero transforms)
+│   ├── cleaning.py                   # Silver: cleaning + quarantine
+│   ├── external_data.py              # External: POI + Weather + Population
+│   ├── features.py                   # Gold: feature engineering (57 features)
+│   └── model.py                      # Model: 3-method ensemble prediction
+│
+├── notebooks/                        # Jupyter notebooks for EDA and evaluation
+│   └── 01_EDA_and_Modeling.ipynb
 │
 ├── docs/                             # Reference documentation
 │   ├── architecture.md               # System architecture & data flow
 │   ├── guidelines.md                 # Coding standards & known anomalies
 │   └── solution_and_targets.md       # Methodology & math framework
 │
-├── bronze/                           # Raw data (gitignored)
-├── silver/                           # Cleaned data (gitignored)
-│   └── rejected_records/             # Quarantined records with failure reasons
-├── gold/                             # Enriched features (gitignored)
-├── output/                           # Final predictions
+├── reports/                          # Optional output reports
 │
+├── data/                             # Lakehouse data layers (gitignored)
+│   ├── raw/                          # Original raw extract
+│   ├── bronze/                       # Raw copy
+│   ├── silver/                       # Cleaned data + quarantine
+│   ├── gold/                         # Enriched features + intermediate ML tables
+│   └── output/                       # Final predictions
+│
+├── requirements.txt
 ├── .gitignore
 └── README.md
 ```

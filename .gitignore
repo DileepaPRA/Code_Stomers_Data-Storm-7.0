@@ -2,32 +2,32 @@
 # DataStorm 7.0 — Code_Stomers .gitignore
 # ===========================================
 
-# Ignore all data layer folders (local only)
-bronze/
-silver/
-gold/
-raw_extract/
+# Ignore all data folders (local only)
+data/raw/
+data/bronze/
+data/silver/
+data/gold/
 
-# Ignore data files
+# Ignore data files globally just in case
 *.csv
 *.parquet
 *.xlsx
+*.zip
 
 # EXCEPTION: Allow final predictions output
-!output/
-!output/Code_Stomers_predictions.csv
+!data/output/
+!data/output/Code_Stomers_predictions.csv
 
 # Ignore Jupyter Notebook checkpoints
 .ipynb_checkpoints/
+*/.ipynb_checkpoints/
 
 # Ignore Python cache
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 
 # Ignore OS files
 .DS_Store
 Thumbs.db
-
-# Ignore zip files
-*.zip
