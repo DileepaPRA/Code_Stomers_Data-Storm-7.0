@@ -11,7 +11,6 @@ Anomalies handled:
   - Coordinate swaps (lat/lon swapped when lat > 50)
   - Zero coordinates (0,0) quarantined
   - Negative/zero volume transactions quarantined (credit notes/ghost entries)
-  - Extreme volume outliers flagged
   - Referential integrity across datasets
 """
 

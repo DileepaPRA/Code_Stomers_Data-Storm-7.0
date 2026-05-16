@@ -299,6 +299,25 @@ def main():
 
     # Save final predictions
     output = result[['Outlet_ID', 'Maximum_Monthly_Liters']].copy()
+
+    # --- Missing Submissions Fix ---
+    # Ensure all original outlets from bronze are in the final output
+    bronze_outlet_path = os.path.join(BRONZE_DIR, OUTLET_MASTER_FILE)
+    if os.path.exists(bronze_outlet_path):
+        bronze_outlet = pd.read_csv(bronze_outlet_path)
+        all_bronze_ids = set(bronze_outlet['Outlet_ID'].unique())
+        predicted_ids = set(output['Outlet_ID'].unique())
+        missing_ids = list(all_bronze_ids - predicted_ids)
+
+        if missing_ids:
+            print(f"  [FIX] Re-injecting {len(missing_ids)} quarantined outlets with median potential")
+            fallback_val = output['Maximum_Monthly_Liters'].median()
+            missing_df = pd.DataFrame({
+                'Outlet_ID': missing_ids,
+                'Maximum_Monthly_Liters': fallback_val
+            })
+            output = pd.concat([output, missing_df], ignore_index=True)
+
     output_path = os.path.join(OUTPUT_DIR, PREDICTIONS_FILE)
     output.to_csv(output_path, index=False)
 

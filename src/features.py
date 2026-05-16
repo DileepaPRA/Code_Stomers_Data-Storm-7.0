@@ -67,13 +67,13 @@ def build_transaction_features(txn):
     ).reset_index()
 
     # Fill NaN std (outlets with only 1 month)
-    features['txn_std_monthly_volume'] = features['txn_std_monthly_volume'].fillna(0)
+    features.loc[features['txn_months_active'] < 2, 'txn_std_monthly_volume'] = np.nan
 
     # Coefficient of Variation (low CV → possibly constrained at a cap)
     features['txn_cv_monthly_volume'] = np.where(
-        features['txn_avg_monthly_volume'] > 0,
+        (features['txn_avg_monthly_volume'] > 0) & (features['txn_months_active'] >= 2),
         features['txn_std_monthly_volume'] / features['txn_avg_monthly_volume'],
-        0
+        np.nan
     )
 
     # Percentiles (P90, P95) — closest to true potential
@@ -307,8 +307,15 @@ def main():
     # --- MERGE ALL FEATURES ---
     print("\n  Merging all feature groups...")
 
-    # Start with transaction features (has Outlet_ID + Distributor_ID)
-    model_df = txn_features.copy()
+    # Start with all active outlet IDs (from outlet master)
+    model_df = pd.DataFrame({'Outlet_ID': list(all_outlet_ids)})
+
+    # Merge transaction features
+    model_df = model_df.merge(txn_features, on='Outlet_ID', how='left')
+
+    # Fallback for missing Distributor_ID (outlets with zero valid transactions)
+    mode_dist = dist_map['Distributor_ID'].mode()[0] if not dist_map.empty else 'DIST_W_01'
+    model_df['Distributor_ID'] = model_df['Distributor_ID'].fillna(mode_dist)
 
     # Merge outlet attributes
     model_df = model_df.merge(outlet_features, on='Outlet_ID', how='left')

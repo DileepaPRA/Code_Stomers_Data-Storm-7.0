@@ -107,11 +107,12 @@ The observed volume is **censored**: `V_obs = min(True_Demand, Constraint)`. We 
 
 3. **Constraint Detection & Uplift** — Outlets with low coefficient of variation (CV < 0.3) or flat-top distributions (P95/max > 0.9) flagged as constrained. Capacity-based uplift (5-50%) applied using size and cooler count as proxy.
 
-**Final**: Weighted ensemble → Seasonality adjustment for January 2026 → Floor at historical average.
+**Final**: Weighted ensemble → Seasonality adjustment for January 2026 → Floor at historical average.  
+**Failover Strategy**: Quarantined/dropped `Outlet_ID` entries are automatically re-injected with the dataset median potential to guarantee a 20,000-row perfect submission.
 
 ### Feature Engineering (30+ Features)
 
-- **Transaction features**: volume stats (mean, median, max, P90, P95, std, CV), trend slope, growth ratio, revenue per liter, SKU diversity
+- **Transaction features**: volume stats (mean, median, max, P90, P95, std, CV), trend slope, growth ratio, revenue per liter, SKU diversity. (Missing statistical periods precisely bounded with `NaN`).
 - **Outlet attributes**: size (ordinal), type (one-hot), cooler count
 - **Geographic**: lat/lon, outlet density within 2km
 - **POI**: schools, hospitals, bus stops, banks, shops, worship places, restaurants, tourism within 1km
