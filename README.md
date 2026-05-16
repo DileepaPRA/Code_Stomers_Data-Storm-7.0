@@ -87,15 +87,15 @@ Our reusable DQ framework (`dq_checks.py`) implements 8 parameterizable check ty
 Duplicate, Null, Referential Integrity, Value Range, Format, Outlier (IQR), Consistency, and Whitespace.
 
 **Key anomalies detected and handled:**
-- **985 outlet type typos** (`Bakry`→`Bakery`, `Grocry`→`Grocery`, ` Eatery`→`Eatery`)
+- **985 outlet type typos** (`Bakry`→`Bakery`, `Grocry`→`Grocery`, ` Eatery `→`Eatery`)
 - **600 case inconsistencies** in outlet size (`small`→`Small`)
 - **196 null outlet sizes** — imputed using mode of same outlet type
-- **200 swapped coordinates** (lat/lon reversed) — detected via `lat > 50°` and fixed
-- **40 zero coordinates** (0,0) — quarantined
-- **4,753 negative volumes** (credit notes/returns) — quarantined
+- **200 swapped coordinates** (lat/lon reversed) — detected via `lat > 50°` and mathematically fixed
+- **40 zero coordinates** (0.0, 0.0) — quarantined
+- **4,753 negative volumes** (credit notes/returns representing reverse logistics, not demand) — quarantined
 - **100 zero volumes** (ghost entries) — quarantined
 
-Total quarantined: **4,893 records** with documented `DQ_Failure_Reason`.
+Total quarantined: **4,893 records** computationally routed to `data/silver/rejected_records/` with a documented `DQ_Failure_Reason`.
 
 ### Latent Potential Model (3-Method Ensemble)
 
@@ -109,14 +109,20 @@ The observed volume is **censored**: `V_obs = min(True_Demand, Constraint)`. We 
 
 **Final**: Weighted ensemble → Seasonality adjustment for January 2026 → Floor at historical average.
 
-### Feature Engineering (30+ Features)
+### External Data Acquisition (High Impact)
 
-- **Transaction features**: volume stats (mean, median, max, P90, P95, std, CV), trend slope, growth ratio, revenue per liter, SKU diversity
-- **Outlet attributes**: size (ordinal), type (one-hot), cooler count
-- **Geographic**: lat/lon, outlet density within 2km
-- **POI**: schools, hospitals, bus stops, banks, shops, worship places, restaurants, tourism within 1km
-- **Seasonality**: January distributor seasonality index, province encoding
-- **Calendar**: holiday count, Poya days for January
+To establish environmental context for peer benchmarking, three automated pipelines pull data into the Gold layer:
+1. **OSM Points of Interest**: Uses Overpass API with batch bounding-boxes (to bypass rate limits) to map 10 POI categories (schools, transit, shops, etc.) to outlets.
+2. **Open-Meteo API**: Fetches localized climate data (January average temp & total precipitation) deduplicated by spatial grid cells.
+3. **Population Density Proxy**: Uses Haversine distance spatial clustering to calculate outlet density within 500m, 1km, and 2km.
+
+### Feature Engineering (57 Features)
+
+- **Transaction history (`txn_`)**: Volume stats (mean, median, max, P90, P95, std, CV), trend slope, growth ratio, recent 6m average, revenue per liter, SKU diversity.
+- **Outlet attributes (`outlet_`)**: Size (ordinal mapping), type (one-hot encoded), cooler count.
+- **Geographic & POI (`geo_`, `poi_`)**: Lat/Lon, distance to nearest outlet, counts of schools, hospitals, bus stops, banks, shops, worship places, restaurants, tourism within 1km.
+- **Climate & Population (`weather_`, `pop_`)**: Temp/Precip, local density proxy.
+- **Seasonality & Calendar (`dist_`, `cal_`)**: January distributor seasonality index (encoded), holiday count, Poya days for January.
 
 ---
 
@@ -125,24 +131,24 @@ The observed volume is **censored**: `V_obs = min(True_Demand, Constraint)`. We 
 | Metric | Value |
 |--------|-------|
 | Total outlets | 20,000 |
-| Prediction range | 81L — 4,790L |
-| Mean potential | 441L |
-| Median potential | 204L |
-| Potential >= historical avg | 100% |
-| Potential >= historical max | 79.3% |
+| Prediction range | 50L — 4,790L |
+| Mean potential | 439L |
+| Median potential | 202L |
+| Potential >= historical avg | 100.0% |
+| Potential >= historical max | 76.8% |
 
-**Size ordering** (validates model logic):
-- Small: 174L avg → Medium: 312L → Large: 1,060L → Extra Large: 2,289L ✓
+**Size ordering** (validates causal model logic logically mapping capacity to potential):
+- Small: 169L avg → Medium: 314L → Large: 1,060L → Extra Large: 2,289L ✓
 
 ---
 
 ## GenAI Transparency
 
-Generative AI (Antigravity/Claude) was used as an engineering accelerator for:
-- Initial data exploration and anomaly detection
-- Boilerplate code generation for DQ framework and pipeline structure
-- Brainstorming censored demand estimation methodologies
-- Debugging encoding issues on Windows
+Generative AI (Antigravity/Claude) was strategically used as an engineering accelerator for:
+- **Data exploration**: Initial schema inspection, statistics computation, and anomaly detection.
+- **Boilerplate generation**: Building the modular DQ framework and Lakehouse pipeline structure.
+- **Methodology brainstorming**: Conceptualizing the mathematical approach to left-censored demand estimation.
+- **Pipeline optimization**: Re-writing the POI scraper to use batch bounding boxes and multi-mirror failover to bypass severe API rate-limiting.
 
-All AI-generated code was critically reviewed, tested, and iteratively refined.
-See `docs/solution_and_targets.md` Section 8 for the full transparency log.
+All AI-generated code was critically reviewed, executed, tested, and iteratively refined.
+See `docs/solution_and_targets.md` Section 6 for the full, detailed transparency log.
