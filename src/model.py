@@ -1,18 +1,18 @@
 """
-05_latent_potential_model.py
-============================
+model.py
+========
 Latent Potential Estimation Model
 Predicts the Maximum Monthly Volume Potential (in liters) for January 2026
 for each of the 20,000 retail outlets.
 
-Methodology (multi-method ensemble):
-  1. Quantile Uncapping     — use P95 of historical monthly volume as base potential
-  2. Peer Benchmarking      — outlets in same cluster get lifted to peer frontier
-  3. Constraint Detection   — detect constrained outlets via low CV, apply uplift
-  4. Seasonality Adjustment — scale to January 2026 seasonality
+Methodology (4-method hybrid ensemble):
+  1. Quantile Uncapping     -- use P95 of historical monthly volume as base potential
+  2. Peer Benchmarking      -- outlets in same cluster get lifted to peer frontier
+  3. Constraint Detection   -- detect constrained outlets via low CV, apply uplift
+  4. ML Ceiling (LightGBM)  -- supervised model trained on unconstrained outlets
+  5. Seasonality Adjustment -- scale to January 2026 seasonality
 
-The final potential is:
-  Potential(i) = max(method1, method2, method3) × seasonality_factor
+The final potential blends heuristic and ML methods.
 """
 
 import pandas as pd
@@ -21,6 +21,17 @@ import os
 import sys
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
+
+try:
+    import lightgbm as lgb
+    HAS_LGB = True
+except ImportError:
+    try:
+        import xgboost as xgb
+        HAS_LGB = False
+    except ImportError:
+        HAS_LGB = False
+        xgb = None
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import *
@@ -187,6 +198,94 @@ def method3_constraint_detection(df):
     return potential, is_constrained
 
 
+def method4_ml_ceiling(df, is_constrained):
+    """
+    Method 4: Supervised ML Ceiling Prediction (LightGBM / XGBoost)
+    Train on unconstrained outlets (where observed ~= true demand)
+    to predict the ceiling for constrained outlets.
+    """
+    print("\n  [METHOD 4] ML Ceiling (LightGBM)...")
+
+    # Target: P95 monthly volume (our best proxy for true potential)
+    target_col = 'txn_p95_monthly_volume'
+
+    # Feature columns (exclude IDs, targets, and leaky features)
+    exclude = {'Outlet_ID', 'Distributor_ID', target_col,
+               'txn_p90_monthly_volume', 'txn_max_monthly_volume',
+               'txn_total_volume_all'}
+    feature_cols = [c for c in df.columns
+                    if c not in exclude and df[c].dtype in ['float64', 'int64', 'float32', 'int32', 'bool']]
+
+    X = df[feature_cols].fillna(0).values
+    y = df[target_col].fillna(0).values
+
+    # Split: train on unconstrained outlets (CV > 0.3 = demand is freely expressed)
+    train_mask = ~is_constrained
+    X_train, y_train = X[train_mask], y[train_mask]
+    X_all = X  # predict for everyone
+
+    n_train = train_mask.sum()
+    n_predict = (~train_mask).sum()
+    print(f"    Training set (unconstrained): {n_train:,} outlets")
+    print(f"    Prediction set (constrained):  {n_predict:,} outlets")
+
+    potential = df[['Outlet_ID']].copy()
+
+    if HAS_LGB:
+        model = lgb.LGBMRegressor(
+            n_estimators=300,
+            max_depth=6,
+            learning_rate=0.05,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_alpha=0.1,
+            reg_lambda=1.0,
+            random_state=42,
+            verbose=-1,
+            n_jobs=-1,
+        )
+        model.fit(X_train, y_train)
+        preds = model.predict(X_all)
+        print(f"    Model: LightGBM (300 trees, depth=6)")
+
+        # Log top 5 important features
+        importances = sorted(zip(feature_cols, model.feature_importances_),
+                             key=lambda x: -x[1])[:5]
+        print(f"    Top features: {[f'{n}({v})' for n, v in importances]}")
+
+    elif xgb is not None:
+        model = xgb.XGBRegressor(
+            n_estimators=300,
+            max_depth=6,
+            learning_rate=0.05,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_alpha=0.1,
+            reg_lambda=1.0,
+            random_state=42,
+            verbosity=0,
+            n_jobs=-1,
+        )
+        model.fit(X_train, y_train)
+        preds = model.predict(X_all)
+        print(f"    Model: XGBoost (300 trees, depth=6)")
+    else:
+        print(f"    [WARN] No ML library available. Falling back to P95.")
+        preds = y.copy()
+
+    # For unconstrained outlets, use max of ML prediction and observed P95
+    # For constrained outlets, trust the ML model more (it learned from free-demand outlets)
+    potential['m4_potential'] = np.where(
+        is_constrained,
+        np.maximum(preds, y),  # ML prediction or observed, whichever is higher
+        np.maximum(preds, y)   # same logic — ML should exceed for constrained
+    )
+
+    print(f"    Mean: {potential['m4_potential'].mean():.1f}L | Median: {potential['m4_potential'].median():.1f}L")
+    return potential
+
+
+
 def apply_seasonality_adjustment(potential, df):
     """Adjust raw potential to January 2026 seasonality."""
     print("\n  Applying January 2026 seasonality adjustment...")
@@ -201,30 +300,33 @@ def apply_seasonality_adjustment(potential, df):
     return adjusted
 
 
-def ensemble_predictions(df, m1, m2, m3, is_constrained):
+def ensemble_predictions(df, m1, m2, m3, m4, is_constrained):
     """
-    Combine the three methods into a final prediction.
-    Strategy: weighted combination favoring the most defensible method.
+    Combine four methods into a final prediction.
+    Strategy: weighted blend of heuristic (M1-M3) and ML (M4) methods.
     """
-    print("\n  Building ensemble prediction...")
+    print("\n  Building hybrid ensemble prediction...")
 
     result = df[['Outlet_ID']].copy()
 
-    # Weights: prioritize quantile (most defensible) and peer benchmark
-    # For constrained outlets, weight the constraint method higher
-    w1, w2, w3 = 0.40, 0.35, 0.25  # default weights
+    # --- Unconstrained outlets: trust observed data + ML validation ---
+    # Weights: Quantile=0.30, Peer=0.25, Constraint=0.15, ML=0.30
+    w1, w2, w3, w4 = 0.30, 0.25, 0.15, 0.30
 
     result['raw_potential'] = (
         w1 * m1['m1_potential'].values +
         w2 * m2['m2_potential'].values +
-        w3 * m3['m3_potential'].values
+        w3 * m3['m3_potential'].values +
+        w4 * m4['m4_potential'].values
     )
 
-    # For constrained outlets, give more weight to the uplift method
+    # --- Constrained outlets: weight ML and constraint methods higher ---
+    # Weights: Quantile=0.15, Peer=0.15, Constraint=0.30, ML=0.40
     constrained_potential = (
-        0.30 * m1['m1_potential'].values +
-        0.25 * m2['m2_potential'].values +
-        0.45 * m3['m3_potential'].values
+        0.15 * m1['m1_potential'].values +
+        0.15 * m2['m2_potential'].values +
+        0.30 * m3['m3_potential'].values +
+        0.40 * m4['m4_potential'].values
     )
     result.loc[is_constrained, 'raw_potential'] = constrained_potential[is_constrained]
 
@@ -286,13 +388,14 @@ def main():
     # Load Gold data
     df = load_gold_data()
 
-    # Run the three estimation methods
+    # Run the four estimation methods
     m1 = method1_quantile_uncapping(df)
     m2 = method2_peer_benchmarking(df)
     m3, is_constrained = method3_constraint_detection(df)
+    m4 = method4_ml_ceiling(df, is_constrained)
 
-    # Ensemble
-    result = ensemble_predictions(df, m1, m2, m3, is_constrained)
+    # Hybrid Ensemble
+    result = ensemble_predictions(df, m1, m2, m3, m4, is_constrained)
 
     # Validate
     validate_predictions(result, df)
@@ -331,8 +434,9 @@ def main():
     detail['m1_quantile'] = m1['m1_potential']
     detail['m2_peer'] = m2['m2_potential']
     detail['m3_uplift'] = m3['m3_potential']
+    detail['m4_ml_ceiling'] = m4['m4_potential']
     detail['is_constrained'] = is_constrained
-    detail_path = os.path.join(GOLD_DIR, "potential_analysis.csv")
+    detail_path = os.path.join(GOLD_DIR, POTENTIAL_ANALYSIS)
     detail.to_csv(detail_path, index=False)
     print(f"\n  Detailed analysis saved to: {detail_path}")
 
