@@ -3,13 +3,12 @@
 > **Team**: Code_Stomers  
 > **Competition**: DataStorm v7.0 – Storming Round (Preliminary)  
 > **Deadline**: May 17, 2026 — 06:00 AM IST  
-> **Last updated**: May 15, 2026
 
 ---
 
 ## 1. High-Level Architecture
 
-We follow a **Medallion / Lakehouse** pattern with three layers:
+We follow a **Medallion / Lakehouse** pattern with three layers, powered by Python modules and Jupyter Notebooks:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -26,10 +25,10 @@ We follow a **Medallion / Lakehouse** pattern with three layers:
 │                    │ (Quarantine)                                      │
 │                    └───────────┘                                       │
 │                                                                        │
-│  ┌────────────────────────────┐                                        │
-│  │  EXTERNAL: POI SCRAPING   │ ──► feeds into GOLD layer              │
-│  │  (OpenStreetMap / Overpass)│                                        │
-│  └────────────────────────────┘                                        │
+│  ┌──────────────────────────────────────────────────┐                  │
+│  │  EXTERNAL DATA: POI, WEATHER, POPULATION PROXY  │ ──► feeds GOLD   │
+│  │  (OpenStreetMap / Open-Meteo API / Clustering)  │                  │
+│  └──────────────────────────────────────────────────┘                  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -37,54 +36,41 @@ We follow a **Medallion / Lakehouse** pattern with three layers:
 
 ## 2. Directory Structure
 
+The project has been professionally structured to separate data, source code, analytical notebooks, and documentation.
+
 ```
-Code_Stomers_Data-Storm-7.0/          ← repo root (pushed to GitHub)
+Code_Stomers_Data-Storm-7.0/          
 │
-├── .gitignore                        ← excludes bronze/, silver/, gold/, *.csv, *.parquet
-├── README.md                         ← end-to-end run instructions
+├── src/                              ← Python source code (pipeline modules)
+│   ├── config.py                     ← Shared paths, constants, parameters
+│   ├── dq_checks.py                  ← Reusable DQ check framework (8 check types)
+│   ├── ingest.py                     ← Bronze: raw ingestion (zero transforms)
+│   ├── cleaning.py                   ← Silver: DQ checks, cleaning, quarantine
+│   ├── external_data.py              ← External: OSM POI, Weather, Population Density
+│   ├── features.py                   ← Gold: 57-feature model-ready dataset
+│   ├── model.py                      ← Prediction: 3-method ensemble logic
+│   └── __init__.py
 │
-├── docs/                             ← reference documentation (pushed to Git)
-│   ├── architecture.md               ← THIS FILE
-│   ├── guidelines.md                 ← coding standards & team conventions
-│   └── solution_and_targets.md       ← methodology, math framework, deliverable targets
+├── notebooks/                        ← Jupyter Notebooks for EDA and validation
+│   └── 01_EDA_and_Modeling.ipynb     ← Interactive analysis of predictions
 │
-├── scripts/                          ← all Python scripts (pushed to Git)
-│   ├── dq_checks.py                  ← reusable DQ framework (imported by all scripts)
-│   ├── 01_bronze_ingest.py           ← raw ingestion (copy-only, no transforms)
-│   ├── 02_silver_clean.py            ← DQ checks, cleaning, quarantine
-│   ├── 03_poi_scraping.py            ← external POI data from OpenStreetMap
-│   ├── 04_gold_feature_engineering.py← feature engineering, model-ready dataset
-│   ├── 05_latent_potential_model.py  ← censored demand model + predictions
-│   └── config.py                     ← shared paths, constants, parameters
+├── docs/                             ← Reference documentation
+│   ├── architecture.md               ← System architecture & data flow (This file)
+│   ├── guidelines.md                 ← Coding standards & known anomalies
+│   └── solution_and_targets.md       ← Methodology, math framework, ML models
 │
-├── bronze/                           ← RAW data as-is (LOCAL ONLY — gitignored)
-│   ├── transactions_history_final.csv
-│   ├── outlet_master.csv
-│   ├── outlet_coordinates.csv
-│   ├── distributor_seasonality_details.csv
-│   └── holiday_list.csv
+├── data/                             ← Lakehouse storage (Ignored in Git except output)
+│   ├── raw/                          ← Original raw extract
+│   ├── bronze/                       ← Byte-for-byte raw copy
+│   ├── silver/                       ← Cleaned data
+│   │   └── rejected_records/         ← Quarantined records with failure reasons
+│   ├── gold/                         ← Enriched features
+│   └── output/                       ← Final predictions (`Code_Stomers_predictions.csv`)
 │
-├── silver/                           ← CLEANED data (LOCAL ONLY — gitignored)
-│   ├── transactions_clean.csv
-│   ├── outlet_master_clean.csv
-│   ├── outlet_coordinates_clean.csv
-│   ├── seasonality_clean.csv
-│   ├── holidays_clean.csv
-│   └── rejected_records/             ← quarantined records with failure reasons
-│       ├── transactions_rejected.csv
-│       ├── outlet_master_rejected.csv
-│       └── outlet_coordinates_rejected.csv
-│
-├── gold/                             ← ENRICHED model-ready data (LOCAL ONLY — gitignored)
-│   ├── outlet_features.csv           ← final feature matrix per outlet
-│   ├── poi_data.csv                  ← scraped POI counts per outlet
-│   └── model_ready.csv               ← joined dataset ready for modeling
-│
-├── output/                           ← final deliverables
-│   └── Code_Stomers_predictions.csv  ← Outlet_ID + Maximum_Monthly_Liters
-│
-└── raw_extract/                      ← original zip extraction (gitignored)
-    └── ...original files...
+├── reports/                          ← Output reports (PDF/HTML)
+├── requirements.txt                  ← Python dependencies
+├── .gitignore                        ← Excludes data/ (except output)
+└── README.md                         ← Run instructions
 ```
 
 ---
@@ -95,163 +81,95 @@ Code_Stomers_Data-Storm-7.0/          ← repo root (pushed to GitHub)
 
 | Rule | Detail |
 |------|--------|
-| **Purpose** | Preserve the original data exactly as provided |
-| **Transformations** | NONE — byte-for-byte copy from `raw_extract/` to `bronze/` |
-| **Script** | `01_bronze_ingest.py` |
-| **Output** | Exact copies of the 5 CSV files in `bronze/` |
+| **Purpose** | Preserve the original data exactly as provided. |
+| **Transformations** | NONE — byte-for-byte copy from `data/raw/` to `data/bronze/`. |
+| **Module** | `src/ingest.py` |
+| **Output** | Exact copies of the 5 CSV files in `data/bronze/`. |
 
 ### 3.2 Silver Layer (Cleaned + Quarantined)
 
 | Rule | Detail |
 |------|--------|
-| **Purpose** | Apply all DQ checks, clean data, quarantine failures |
-| **Key Principle** | **Nothing is silently dropped** — every rejected record goes to `rejected_records/` with a documented `DQ_Failure_Reason` |
-| **Script** | `02_silver_clean.py` |
-| **DQ Framework** | `dq_checks.py` — reusable, parameterizable functions |
-| **Outputs** | Clean CSVs in `silver/`, rejected CSVs in `silver/rejected_records/` |
+| **Purpose** | Apply all DQ checks, clean data, quarantine failures. |
+| **Key Principle** | **Nothing is silently dropped** — every rejected record goes to `rejected_records/` with a documented `DQ_Failure_Reason`. |
+| **Module** | `src/cleaning.py` |
+| **DQ Framework** | `src/dq_checks.py` — reusable, parameterizable functions. |
+| **Outputs** | Clean CSVs in `data/silver/`, rejected CSVs in `data/silver/rejected_records/`. |
 
 **DQ Checks Applied per Dataset:**
 
 | Dataset | Checks |
 |---------|--------|
-| `transactions` | Duplicate (composite key), Null (mandatory fields), Referential Integrity (Outlet_ID, Distributor_ID), Value Range (Volume ≥ 0, realistic bounds), Format (ID patterns), Outlier (IQR on volume & bill) |
-| `outlet_master` | Duplicate (Outlet_ID), Null (Outlet_Size), Format (Outlet_ID pattern), Standardize typos (Bakry→Bakery, Grocry→Grocery, " Eatery"→"Eatery", "small"→"Small") |
-| `outlet_coordinates` | Null, Swapped lat/lon detection & fix, Zero coordinate detection, Sri Lanka bounds (lat 5.9–9.9, lon 79.4–82.0) |
-| `seasonality` | Duplicate, Null, Format, Referential Integrity (Distributor_ID) |
-| `holidays` | Duplicate, Null, Date format parsing |
+| `transactions` | Duplicate, Null (mandatory fields), Referential Integrity (Outlet_ID, Distributor_ID), Value Range (Volume >= 0), Consistency (Zero volume ghost entry). |
+| `outlet_master` | Duplicate, Format, Standardize typos (`Bakry`→`Bakery`, ` Eatery `→`Eatery`, `small`→`Small`), Null imputation for size based on type. |
+| `outlet_coordinates` | Duplicate, Swapped lat/lon detection & fix, Zero coordinate detection, Value bounds (Sri Lanka lat 5.9–9.9, lon 79.4–82.0). |
+| `seasonality` | Duplicate, Null, Value bounds. |
+| `holidays` | Duplicate, Null. |
 
 ### 3.3 Gold Layer (Enriched + Feature Engineering)
 
 | Rule | Detail |
 |------|--------|
-| **Purpose** | Produce model-ready feature matrix at the **outlet level** |
-| **Inputs** | All Silver-layer datasets + external POI data |
-| **Script** | `04_gold_feature_engineering.py` |
-| **Grain** | One row per `Outlet_ID` |
+| **Purpose** | Produce model-ready feature matrix at the **outlet level** (57 features). |
+| **Inputs** | All Silver-layer datasets + external features. |
+| **Module** | `src/features.py` |
+| **Grain** | One row per `Outlet_ID`. |
 
-### 3.4 External Data (POI Scraping)
+### 3.4 External Data
 
 | Rule | Detail |
 |------|--------|
-| **Purpose** | Enrich outlet profiles with nearby Points of Interest |
-| **Source** | OpenStreetMap Overpass API (free, no auth required) |
-| **Script** | `03_poi_scraping.py` |
-| **POI Categories** | Schools, hospitals, bus stops, banks, restaurants, places of worship, shops, tourist attractions |
-| **Method** | Batch query by outlet coordinate clusters (radius-based) |
-| **Output** | `gold/poi_data.csv` — POI counts per outlet within configurable radius |
+| **Purpose** | Enrich outlet profiles with localized environmental context. |
+| **Module** | `src/external_data.py` |
+| **Sources** | OpenStreetMap (Overpass API for POIs), Open-Meteo API (Weather), Haversine spatial clustering (Population proxy). |
+| **Method** | Batch queries (bounding box) to bypass API rate limits, grid deduplication for weather, and spatial joins via Haversine distance. |
 
 ---
 
-## 4. Data Flow Diagram
-
-```mermaid
-graph LR
-    subgraph "Bronze (Raw)"
-        B1[transactions_history_final.csv]
-        B2[outlet_master.csv]
-        B3[outlet_coordinates.csv]
-        B4[distributor_seasonality.csv]
-        B5[holiday_list.csv]
-    end
-
-    subgraph "Silver (Cleaned)"
-        S1[transactions_clean.csv]
-        S2[outlet_master_clean.csv]
-        S3[outlet_coordinates_clean.csv]
-        S4[seasonality_clean.csv]
-        S5[holidays_clean.csv]
-        SR[rejected_records/]
-    end
-
-    subgraph "External"
-        E1[POI Scraping via Overpass API]
-    end
-
-    subgraph "Gold (Enriched)"
-        G1[outlet_features.csv]
-        G2[poi_data.csv]
-        G3[model_ready.csv]
-    end
-
-    subgraph "Output"
-        O1[Code_Stomers_predictions.csv]
-    end
-
-    B1 -->|DQ checks| S1
-    B2 -->|DQ checks + typo fix| S2
-    B3 -->|DQ checks + coord fix| S3
-    B4 -->|DQ checks| S4
-    B5 -->|DQ checks| S5
-    B1 -->|failures| SR
-    B2 -->|failures| SR
-    B3 -->|failures| SR
-
-    S1 --> G1
-    S2 --> G1
-    S3 --> G1
-    S4 --> G1
-    S5 --> G1
-    E1 --> G2
-    G1 --> G3
-    G2 --> G3
-
-    G3 -->|Latent Potential Model| O1
-```
-
----
-
-## 5. Script Execution Order
+## 4. Script Execution Order
 
 Run these in strict sequence — each depends on the previous:
 
 ```bash
-# Step 1: Copy raw files to bronze (no transforms)
-python scripts/01_bronze_ingest.py
+# Step 1: Copy raw files to bronze
+python src/ingest.py
 
 # Step 2: Clean data, quarantine failures to silver
-python scripts/02_silver_clean.py
+python src/cleaning.py
 
-# Step 3: Scrape POI data from OpenStreetMap (can run in parallel with Step 2)
-python scripts/03_poi_scraping.py
+# Step 3: Scrape External Data (POI, Weather, Density)
+python src/external_data.py
 
-# Step 4: Feature engineering → gold layer
-python scripts/04_gold_feature_engineering.py
+# Step 4: Feature engineering → gold layer (57 features)
+python src/features.py
 
 # Step 5: Build latent potential model → predictions
-python scripts/05_latent_potential_model.py
+python src/model.py
 ```
 
-**Total pipeline runtime estimate**: ~15–30 minutes (mostly POI scraping)
+**Total pipeline runtime estimate**: ~15–20 minutes (mostly POI scraping).
 
 ---
 
-## 6. Key Design Decisions
+## 5. Key Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
-| **Python scripts over Jupyter notebooks** | More reproducible, easier to run end-to-end via CLI, cleaner Git history |
-| **CSV over Parquet for intermediate layers** | Simplicity, easy inspection, small enough dataset (20K outlets) |
-| **Shared `config.py`** | All paths, constants, and parameters in one place — change once, apply everywhere |
-| **`dq_checks.py` as importable module** | Every DQ check is a reusable function — same check logic across all 5 datasets |
-| **Rejected records store** | Never silently drop data — every quarantined record has a `DQ_Failure_Reason` column |
-| **Overpass API for POI** | Free, no API key, comprehensive global coverage, supports radius queries |
+| **src/ Python Package** | Standardizing scripts into a modular package ensures cleaner code organization and easier imports. |
+| **CSV over Parquet** | Simplicity, easy inspection, small enough dataset (20K outlets). |
+| **Shared `config.py`** | All paths, constants, and parameters in one place — change once, apply everywhere. |
+| **`dq_checks.py`** | Reusable Data Quality check architecture standardizes anomaly detection across datasets. |
+| **Quarantine System** | Transparency is critical in data engineering. `DQ_Failure_Reason` tracking prevents silent logic bugs. |
+| **Batch API Scraping** | Querying external APIs per-outlet (20,000 times) fails due to rate limits. Pulling a full bounding box and mapping locally is exponentially faster. |
 
 ---
 
-## 7. Technology Stack
+## 6. Technology Stack
 
 | Component | Tool |
 |-----------|------|
-| Language | Python 3.12 |
-| Data Manipulation | pandas, numpy |
-| Statistical Modeling | scipy (Tobit/censored regression), scikit-learn |
-| POI Scraping | requests + Overpass QL (OpenStreetMap) |
-| Version Control | Git + GitHub |
-| Report | PDF (generated or manual) |
-
----
-
-## 8. What Gets Pushed to GitHub
-
-✅ **Pushed**: `scripts/`, `docs/`, `README.md`, `.gitignore`, `output/Code_Stomers_predictions.csv`  
-❌ **NOT pushed**: `bronze/`, `silver/`, `gold/`, `raw_extract/`, any `*.csv` data files (except final predictions)
+| Language | Python 3.10+ |
+| Data Processing | `pandas`, `numpy` |
+| Machine Learning | `scikit-learn` (KMeans clustering), `scipy` |
+| External API | `requests`, `osmnx`, `geopandas` |
+| Notebooks | `jupyter`, `matplotlib`, `seaborn` |
