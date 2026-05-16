@@ -245,31 +245,40 @@ def build_holiday_features(holidays):
     }
 
 
-def merge_poi_data(all_outlet_ids):
-    """Load POI data from gold layer if available."""
-    print("\n  Loading POI data...")
+def merge_external_data(all_outlet_ids):
+    """Load external features (POI + Weather + Population) from gold layer."""
+    print("\n  Loading external features (POI + Weather + Population)...")
 
+    # Try the full external features file first
+    ext_path = os.path.join(GOLD_DIR, "external_features.csv")
     poi_path = os.path.join(GOLD_DIR, POI_DATA_FILE)
-    if os.path.exists(poi_path):
-        poi = pd.read_csv(poi_path)
-        # Keep only POI columns + Outlet_ID
-        poi_cols = ['Outlet_ID'] + [c for c in poi.columns if c.startswith('poi_')]
-        poi = poi[poi_cols]
-        print(f"  POI data loaded: {len(poi):,} outlets, {len(poi_cols)-1} features")
+
+    if os.path.exists(ext_path):
+        ext = pd.read_csv(ext_path)
+        # Keep Outlet_ID + all feature columns (poi_, weather_, pop_)
+        feat_cols = ['Outlet_ID'] + [c for c in ext.columns
+                     if c.startswith(('poi_', 'weather_', 'pop_'))]
+        ext = ext[feat_cols]
+        print(f"  External features loaded: {len(ext):,} outlets, {len(feat_cols)-1} features")
+    elif os.path.exists(poi_path):
+        ext = pd.read_csv(poi_path)
+        feat_cols = ['Outlet_ID'] + [c for c in ext.columns if c.startswith('poi_')]
+        ext = ext[feat_cols]
+        print(f"  POI-only data loaded: {len(ext):,} outlets, {len(feat_cols)-1} features")
     else:
-        print(f"  [WARN] POI data not found at {poi_path}")
-        print(f"  Creating empty POI features (run 03_poi_scraping.py to populate)")
-        poi = pd.DataFrame({'Outlet_ID': list(all_outlet_ids)})
+        print(f"  [WARN] No external data found. Creating empty features.")
+        print(f"  Run 03_poi_scraping.py to populate.")
+        ext = pd.DataFrame({'Outlet_ID': list(all_outlet_ids)})
         for cat in ['schools', 'hospitals', 'bus_stops', 'banks', 'shops',
-                     'worship', 'restaurants', 'tourism', 'fuel_stations', 'markets', 'total']:
-            poi[f'poi_{cat}'] = 0
+                     'worship', 'restaurants', 'tourism', 'fuel', 'markets', 'total']:
+            ext[f'poi_{cat}'] = 0
 
     # Ensure all outlets are represented
     all_ids_df = pd.DataFrame({'Outlet_ID': list(all_outlet_ids)})
-    poi = all_ids_df.merge(poi, on='Outlet_ID', how='left')
-    poi = poi.fillna(0)
+    ext = all_ids_df.merge(ext, on='Outlet_ID', how='left')
+    ext = ext.fillna(0)
 
-    return poi
+    return ext
 
 
 def main():
@@ -293,7 +302,7 @@ def main():
     season_features = build_seasonality_features(season, dist_map)
 
     holiday_feats = build_holiday_features(holidays)
-    poi_features = merge_poi_data(all_outlet_ids)
+    external_features = merge_external_data(all_outlet_ids)
 
     # --- MERGE ALL FEATURES ---
     print("\n  Merging all feature groups...")
@@ -314,8 +323,8 @@ def main():
         on='Outlet_ID', how='left'
     )
 
-    # Merge POI
-    model_df = model_df.merge(poi_features, on='Outlet_ID', how='left')
+    # Merge external features (POI + Weather + Population)
+    model_df = model_df.merge(external_features, on='Outlet_ID', how='left')
 
     # Add global holiday features
     for k, v in holiday_feats.items():
