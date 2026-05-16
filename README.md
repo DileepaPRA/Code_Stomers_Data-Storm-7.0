@@ -91,12 +91,12 @@ Duplicate, Null, Referential Integrity, Value Range, Format, Outlier (IQR), Cons
 - **985 outlet type typos** (`Bakry`→`Bakery`, `Grocry`→`Grocery`, ` Eatery`→`Eatery`)
 - **600 case inconsistencies** in outlet size (`small`→`Small`)
 - **196 null outlet sizes** — imputed using mode of same outlet type
-- **200 swapped coordinates** (lat/lon reversed) — detected via `lat > 50°` and fixed
-- **40 zero coordinates** (0,0) — quarantined
-- **4,753 negative volumes** (credit notes/returns) — quarantined
+- **200 swapped coordinates** (lat/lon reversed) — detected via `lat > 50°` and mathematically fixed
+- **40 zero coordinates** (0.0, 0.0) — quarantined
+- **4,753 negative volumes** (credit notes/returns representing reverse logistics, not demand) — quarantined
 - **100 zero volumes** (ghost entries) — quarantined
 
-Total quarantined: **4,893 records** with documented `DQ_Failure_Reason`.
+Total quarantined: **4,893 records** computationally routed to `data/silver/rejected_records/` with a documented `DQ_Failure_Reason`.
 
 ### Latent Potential Model (3-Method Ensemble)
 
@@ -113,7 +113,7 @@ The observed volume is **censored**: `V_obs = min(True_Demand, Constraint)`. We 
 
 ### Feature Engineering (30+ Features)
 
-- **Transaction features**: volume stats (mean, median, max, P90, P95, std, CV), trend slope, growth ratio, revenue per liter, SKU diversity. (Missing statistical periods precisely bounded with `NaN`).
+- **Transaction features**: volume stats (mean, median, max, P90, P95, std, CV), trend slope, growth ratio, revenue per liter, SKU diversity
 - **Outlet attributes**: size (ordinal), type (one-hot), cooler count
 - **Geographic**: lat/lon, outlet density within 2km
 - **POI**: schools, hospitals, bus stops, banks, shops, worship places, restaurants, tourism within 1km
@@ -148,5 +148,5 @@ Generative AI (Antigravity/Claude) was used as an engineering accelerator for:
 - Brainstorming censored demand estimation methodologies
 - Debugging encoding issues on Windows
 
-All AI-generated code was critically reviewed, tested, and iteratively refined.
-See `docs/solution_and_targets.md` Section 8 for the full transparency log.
+All AI-generated code was critically reviewed, executed, tested, and iteratively refined.
+See `docs/solution_and_targets.md` Section 6 for the full, detailed transparency log.
