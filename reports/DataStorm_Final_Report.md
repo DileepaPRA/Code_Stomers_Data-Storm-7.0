@@ -22,7 +22,7 @@ We implemented a robust, production-grade **Lakehouse Architecture** to process 
 2. **Silver (Forensics & Hygiene)**: Parametric Data Quality (DQ) checks, standardizing typological errors, resolving spatial anomalies, and computationally quarantining invalid records.
 3. **Gold (Feature Engineering)**: Enrichment via 3 distinct external data sources (OpenStreetMap, Open-Meteo, Spatial Clustering) resulting in a model-ready matrix of 57 features.
 
-The final prediction utilizes a **3-Method Weighted Ensemble** (Quantile Uncapping, K-Means Peer Benchmarking, and Coefficient of Variation Constraint Uplift).
+The final prediction utilizes a **4-Method Hybrid Ensemble** blending statistical heuristics (Quantile Uncapping, K-Means Peer Benchmarking, Constraint Uplift) with a supervised **LightGBM** gradient boosting model trained exclusively on unconstrained outlets.
 
 ---
 
@@ -81,7 +81,7 @@ As high-resolution census data is difficult to align with arbitrary coordinates,
 ## Page 4: Causal Base Logic
 
 ### 4.1 Defining the Left-Censored Demand Curve
-Our mathematical approach assumes historical data is a censored representation of true potential: $V_{obs} = \min(Demand_{true}, Constraint)$. Standard regression models fail here because they fit to the *average* of the censored data, naturally underpredicting the true ceiling. We designed a **3-Method Ensemble** to calculate the uncapped potential.
+Our mathematical approach assumes historical data is a censored representation of true potential: $V_{obs} = \min(Demand_{true}, Constraint)$. Standard regression models fail here because they fit to the *average* of the censored data, naturally underpredicting the true ceiling. We designed a **4-Method Hybrid Ensemble** to calculate the uncapped potential.
 
 ### 4.2 Method 1: Quantile-Based Uncapping (Base Ceiling)
 For outlets with sufficient historical data, the periods where constraints were least binding represent the truest observation of potential. 
@@ -98,8 +98,11 @@ We computationally flag outlets whose observed distributions prove they are hitt
 - **Signals**: We calculate the Coefficient of Variation ($CV = \frac{\sigma}{\mu}$) for monthly volume. Outlets with $CV < 0.3$ exhibit unnaturally flat variance, indicating a hard monthly cap. Similarly, if an outlet's $P_{95} / Max\_Volume > 0.95$, the distribution has a flat, truncated top.
 - **Uplift**: Flagged outlets receive a volumetric multiplier based on physical capacity proxies (specifically, Cooler Count and ordinal Outlet Size).
 
-### 4.5 Final Aggregation
-The final latent potential is a weighted ensemble prioritizing the Constraint methodology for flagged shops, and Peer Benchmarking for unconstrained shops. Finally, we multiply the output by the outlet's specific January distributor seasonality index, producing the final `Maximum_Monthly_Liters` prediction for January 2026.
+### 4.5 Method 4: ML Ceiling Prediction (LightGBM)
+To move beyond pure heuristics, we trained a **LightGBM gradient boosting regressor** (300 trees, max depth 6) exclusively on the 9,835 unconstrained outlets (CV > 0.3), where observed volumes closely approximate true latent demand. This model learns the non-linear relationship between the 57 environmental and transactional features and the demand ceiling. We then predict the ceiling for all 20,000 outlets, including the 10,165 constrained ones where heuristics alone would underpredict. Top features learned by the model: `txn_std_monthly_volume`, `txn_avg_monthly_volume`, `txn_min_monthly_volume`.
+
+### 4.6 Final Hybrid Aggregation
+The final latent potential uses **differentiated weighting** based on constraint status. For constrained outlets, ML and Constraint methods receive 70% of the weight. For unconstrained outlets, Quantile and ML methods dominate. Finally, we multiply the output by the outlet's specific January distributor seasonality index, producing the final `Maximum_Monthly_Liters` prediction for January 2026.
 
 ---
 
@@ -116,4 +119,5 @@ Generative AI (specifically Anthropic's Claude / Deepmind's Antigravity) was str
 | **May 15, 22:30** | Boilerplate Generation | Generated the structural boilerplate for the `src/dq_checks.py` framework to speed up typing. | Heavily refactored the generic AI functions to handle FMCG-specific edge cases (e.g., writing the custom logic to mathematically fix lat/lon swaps). |
 | **May 16, 02:00** | Causal Math Ideation | Brainstormed statistical approaches to solving the left-censored demand curve. | Evaluated AI suggestions (Tobit regression vs. Quantile Uncapping). We manually chose to discard Tobit in favor of Peer Benchmarking due to time constraints and mathematical defensibility. |
 | **May 16, 06:00** | API Scraping Optimization | Re-wrote the OpenStreetMap Overpass API scraper. The initial per-outlet script hit rate limits; AI assisted in rewriting it to use a vectorized Bounding Box approach. | Ran the script iteratively in a test environment; manually confirmed that the resulting 32,000 POIs were accurately mapped via Haversine distance to the 20,000 outlets. |
+| **May 16, 10:00** | ML Model Integration | Integrated LightGBM as Method 4 in the hybrid ensemble. Trained on unconstrained outlets to predict the demand ceiling for constrained outlets. | Validated that size ordering held (Small < Medium < Large < XL), 100% of predictions exceeded historical average, and all 8 automated validation checks passed. |
 | **May 16, 12:00** | Documentation & Reporting | Assisted in formatting the Markdown documentation (`architecture.md`, `README.md`) based on the team's completed work. | Manually audited all numbers, feature counts (57), and validation results in the documentation to ensure perfect accuracy. |

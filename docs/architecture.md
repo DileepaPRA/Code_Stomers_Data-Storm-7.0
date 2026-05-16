@@ -48,7 +48,8 @@ Code_Stomers_Data-Storm-7.0/
 │   ├── cleaning.py                   ← Silver: DQ checks, cleaning, quarantine
 │   ├── external_data.py              ← External: OSM POI, Weather, Population Density
 │   ├── features.py                   ← Gold: 57-feature model-ready dataset
-│   ├── model.py                      ← Prediction: 3-method ensemble logic
+│   ├── model.py                      ← Prediction: 4-method hybrid ensemble (LightGBM)
+│   ├── validate_output.py            ← CI gate: automated output assertion checks
 │   └── __init__.py
 │
 ├── notebooks/                        ← Jupyter Notebooks for EDA and validation
@@ -143,8 +144,11 @@ python src/external_data.py
 # Step 4: Feature engineering → gold layer (57 features)
 python src/features.py
 
-# Step 5: Build latent potential model → predictions
+# Step 5: 4-method hybrid ensemble model → predictions
 python src/model.py
+
+# Step 6: Automated validation (kill-switch assertions)
+python src/validate_output.py
 ```
 
 **Total pipeline runtime estimate**: ~15–20 minutes (mostly POI scraping).
@@ -170,6 +174,6 @@ python src/model.py
 |-----------|------|
 | Language | Python 3.10+ |
 | Data Processing | `pandas`, `numpy` |
-| Machine Learning | `scikit-learn` (KMeans clustering), `scipy` |
+| Machine Learning | `lightgbm` (gradient boosting), `scikit-learn` (KMeans), `scipy` |
 | External API | `requests`, `osmnx`, `geopandas` |
 | Notebooks | `jupyter`, `matplotlib`, `seaborn` |

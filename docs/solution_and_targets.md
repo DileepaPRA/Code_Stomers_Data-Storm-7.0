@@ -39,7 +39,7 @@ There is **no target variable (y)**. This is an **unsupervised estimation proble
 
 ### 2.1 Core Approach: Left-Censored Demand Estimation
 
-We treat the problem as **left-censored data**. We built a **3-method ensemble** to estimate the uncensored demand ceiling.
+We treat the problem as **left-censored data**. We built a **4-method hybrid ensemble** combining statistical heuristics with supervised machine learning to estimate the uncensored demand ceiling.
 
 #### Method 1: Quantile-Based Uncapping (Base)
 
@@ -64,19 +64,27 @@ We treat the problem as **left-censored data**. We built a **3-method ensemble**
 - **Signal 2 (Flat Top)**: If P95 / Max > 0.9, the distribution is truncated.
 - **Uplift**: Constrained outlets receive a 5% to 50% multiplier based on physical capacity proxies (cooler count and outlet size).
 
-### 2.2 Final Ensemble Aggregation
+#### Method 4: ML Ceiling (LightGBM)
 
-The final latent potential is a weighted combination:
+**Intuition**: A supervised gradient boosting model can learn the complex, non-linear relationship between outlet features and true demand from the subset of outlets that are provably unconstrained.
+
+- We train a LightGBM regressor (300 trees, depth=6) exclusively on the unconstrained outlets (CV > 0.3), where observed volume closely approximates true latent demand.
+- We then use this trained model to predict the demand ceiling for all 20,000 outlets, including the 10,165 constrained ones.
+- Top learned features: `txn_std_monthly_volume`, `txn_avg_monthly_volume`, `txn_min_monthly_volume`.
+
+### 2.2 Final Hybrid Ensemble Aggregation
+
+The final latent potential is a weighted combination of heuristic and ML methods:
 
 ```python
-# Unconstrained outlets
-Raw_Potential = 0.40 * M1_Quantile + 0.35 * M2_Peer + 0.25 * M3_Constraint
+# Unconstrained outlets (trust observed data + ML validation)
+Raw_Potential = 0.30 * M1_Quantile + 0.25 * M2_Peer + 0.15 * M3_Constraint + 0.30 * M4_ML
 
-# Constrained outlets (weight constraint methodology higher)
-Raw_Potential = 0.30 * M1_Quantile + 0.25 * M2_Peer + 0.45 * M3_Constraint
+# Constrained outlets (weight ML and constraint methods higher)
+Raw_Potential = 0.15 * M1_Quantile + 0.15 * M2_Peer + 0.30 * M3_Constraint + 0.40 * M4_ML
 ```
 
-We then apply **Seasonality Adjustment** to project specifically to January 2026, and floor the prediction at the historical average to ensure logical consistency. To satisfy strict submission bounds, quarantined outlets are automatically padded back dynamically using global feature median.
+We then apply **Seasonality Adjustment** to project specifically to January 2026, and floor the prediction at the historical average to ensure logical consistency.
 
 ---
 
@@ -141,14 +149,18 @@ The Gold layer (`src/features.py`) constructs a 57-feature matrix per outlet.
 
 ### 5.2 Sanity Check Results
 
-Our ensemble model successfully passes all logical sanity checks:
+Our hybrid ensemble model passes all logical sanity checks and 8 automated validation assertions (`src/validate_output.py`):
 
 | Check                               | Result                                                      | Pass/Fail |
 | ----------------------------------- | ----------------------------------------------------------- | --------- |
-| No negative or zero predictions     | Min prediction is 50.4L                                     | ✅        |
+| Exactly 20,000 rows                 | 20,000                                                      | ✅        |
+| No null values                      | 0                                                           | ✅        |
+| No negative or zero predictions     | Min prediction is 49.8L                                     | ✅        |
 | Prediction $\ge$ Historical Average | 100.0% of outlets                                           | ✅        |
-| Prediction $\ge$ Historical Maximum | 76.8% of outlets                                            | ✅        |
-| Size Ordering (Logical capacity)    | Small (169L) < Medium (314L) < Large (1,060L) < XL (2,289L) | ✅        |
+| Prediction $\ge$ Historical Maximum | 68.4% of outlets                                            | ✅        |
+| Size Ordering (Logical capacity)    | Small (152L) < Medium (304L) < Large (1,003L) < XL (2,172L) | ✅        |
+| Valid Outlet_ID format              | 20,000/20,000                                               | ✅        |
+| Reasonable range                    | 50L – 3,825L (mean: 413L)                                   | ✅        |
 
 ---
 
@@ -164,3 +176,5 @@ Our ensemble model successfully passes all logical sanity checks:
 | May 16, 02:00 | Antigravity | **Methodology** — Brainstormed censored demand estimation approaches.                                                                                | Discussed mathematical soundness; verified constraints like CV < 0.3 in the raw data.                    |
 | May 16, 06:00 | Antigravity | **External Data** — Re-wrote POI scraper to use batch bounding boxes and multiple mirrors to bypass Overpass API limits. Added Open-Meteo API logic. | Tested manually with a Python script; confirmed 32K+ POIs accurately fetched and mapped to 20K outlets.  |
 | May 16, 06:45 | Antigravity | **Refactoring** — Transitioned `scripts/` folder to a proper `src/` Python module structure.                                                         | Verified imports and ran pipeline end-to-end to ensure output stability.                                 |
+| May 16, 10:00 | Antigravity | **ML Model** — Integrated LightGBM as Method 4. Trained on unconstrained outlets to predict ceiling for constrained ones.                             | Validated that size ordering held, predictions > historical avg at 100%, and all 8 kill-switch checks passed. |
+| May 16, 10:20 | Antigravity | **Validation Script** — Built `src/validate_output.py` as an automated CI-gate with 8 strict assertions on the final CSV.                             | Ran the script; confirmed all 8 checks passed with exit code 0.                                          |
