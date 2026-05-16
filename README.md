@@ -87,6 +87,7 @@ Our reusable DQ framework (`dq_checks.py`) implements 8 parameterizable check ty
 Duplicate, Null, Referential Integrity, Value Range, Format, Outlier (IQR), Consistency, and Whitespace.
 
 **Key anomalies detected and handled:**
+
 - **985 outlet type typos** (`Bakry`→`Bakery`, `Grocry`→`Grocery`, ` Eatery`→`Eatery`)
 - **600 case inconsistencies** in outlet size (`small`→`Small`)
 - **196 null outlet sizes** — imputed using mode of same outlet type
@@ -123,16 +124,17 @@ The observed volume is **censored**: `V_obs = min(True_Demand, Constraint)`. We 
 
 ## Evaluation Results
 
-| Metric | Value |
-|--------|-------|
-| Total outlets | 20,000 |
-| Prediction range | 81L — 4,790L |
-| Mean potential | 441L |
-| Median potential | 204L |
-| Potential >= historical avg | 100% |
-| Potential >= historical max | 79.3% |
+| Metric                      | Value        |
+| --------------------------- | ------------ |
+| Total outlets               | 20,000       |
+| Prediction range            | 81L — 4,790L |
+| Mean potential              | 441L         |
+| Median potential            | 204L         |
+| Potential >= historical avg | 100%         |
+| Potential >= historical max | 79.3%        |
 
 **Size ordering** (validates model logic):
+
 - Small: 174L avg → Medium: 312L → Large: 1,060L → Extra Large: 2,289L ✓
 
 ---
@@ -140,6 +142,7 @@ The observed volume is **censored**: `V_obs = min(True_Demand, Constraint)`. We 
 ## GenAI Transparency
 
 Generative AI (Antigravity/Claude) was used as an engineering accelerator for:
+
 - Initial data exploration and anomaly detection
 - Boilerplate code generation for DQ framework and pipeline structure
 - Brainstorming censored demand estimation methodologies
